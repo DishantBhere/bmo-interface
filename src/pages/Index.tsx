@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 
 const Index = () => {
@@ -8,25 +8,119 @@ const Index = () => {
   const [speaking, setSpeaking] = useState(false);
   const [spokenText, setSpokenText] = useState("");
   const [textVisible, setTextVisible] = useState(false);
+  const [listening, setListening] = useState(false);
+  
+  const recognitionRef = useRef<any>(null);
+  const synthesisRef = useRef<any>(null);
 
-  // Blink every 3-5 seconds
+  // Initialize Speech Recognition
   useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = "en-US";
+
+      recognitionRef.current.onstart = () => {
+        setListening(true);
+        setSpeaking(false);
+        setTextVisible(true);
+        setSpokenText("");
+      };
+
+      recognitionRef.current.onresult = (event: any) => {
+        let interimTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            setSpokenText(transcript);
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        if (interimTranscript) {
+          setSpokenText(interimTranscript);
+        }
+      };
+
+      recognitionRef.current.onend = () => {
+        setListening(false);
+        generateAndSpeak();
+      };
+
+      recognitionRef.current.onerror = () => {
+        setListening(false);
+      };
+    }
+  }, []);
+
+  // Generate response and speak
+  const generateAndSpeak = () => {
+    const responses = [
+      "That sounds interesting!",
+      "I understand.",
+      "Tell me more.",
+      "I'm listening.",
+      "Got it!",
+    ];
+    const responseText = responses[Math.floor(Math.random() * responses.length)];
+    speakText(responseText);
+  };
+
+  // Text-to-Speech function
+  const speakText = (text: string) => {
+    window.speechSynthesis.cancel();
+    setSpeaking(true);
+    setTextVisible(true);
+    setSpokenText(text);
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    utterance.onend = () => {
+      setSpeaking(false);
+      setTextVisible(false);
+      setSpokenText("");
+    };
+
+    utterance.onerror = () => {
+      setSpeaking(false);
+      setTextVisible(false);
+      setSpokenText("");
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Handle red button click to start listening
+  const handleListenClick = () => {
+    if (recognitionRef.current && !listening && !speaking) {
+      recognitionRef.current.start();
+    }
+  };
+
+  // Blink every 3-5 seconds (only when not listening or speaking)
+  useEffect(() => {
+    if (listening || speaking) return;
+    
     const blink = () => {
       setBlinking(true);
       setTimeout(() => setBlinking(false), 150);
     };
     const interval = setInterval(blink, 3000 + Math.random() * 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [listening, speaking]);
 
   // Expose speaking control via window for external scripts
   useEffect(() => {
     (window as any).bmoSpeak = (text: string) => {
-      setSpokenText(text);
-      setSpeaking(true);
-      setTextVisible(true);
+      speakText(text);
     };
     (window as any).bmoStopSpeaking = () => {
+      window.speechSynthesis.cancel();
       setSpeaking(false);
       setTextVisible(false);
       setSpokenText("");
@@ -92,9 +186,9 @@ const Index = () => {
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
-              opacity: speaking ? 0 : 1,
+              opacity: speaking || listening ? 0 : 1,
               transition: "opacity 0.4s ease",
-              pointerEvents: speaking ? "none" : "auto",
+              pointerEvents: speaking || listening ? "none" : "auto",
             }}
           >
             <div className="flex flex-col items-center" style={{ gap: "clamp(6px, 2vw, 12px)", marginTop: "-4%" }}>
@@ -138,7 +232,7 @@ const Index = () => {
             style={{
               opacity: textVisible ? 1 : 0,
               transition: "opacity 0.4s ease",
-              pointerEvents: speaking ? "auto" : "none",
+              pointerEvents: speaking || listening ? "auto" : "none",
               padding: "clamp(12px, 4vw, 24px)",
             }}
           >
@@ -226,6 +320,7 @@ const Index = () => {
             </div>
             {/* Big pink button */}
             <div
+              onClick={handleListenClick}
               style={{
                 width: "clamp(30px, 9vw, 48px)",
                 height: "clamp(30px, 9vw, 48px)",
@@ -233,6 +328,9 @@ const Index = () => {
                 borderRadius: "50%",
                 border: "2px solid #d4748a",
                 boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                cursor: listening || speaking ? "default" : "pointer",
+                opacity: listening || speaking ? 0.7 : 1,
+                transition: "opacity 0.2s ease",
               }}
             />
           </div>
