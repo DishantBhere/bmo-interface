@@ -1,15 +1,5 @@
 import { useEffect, useState } from "react";
 
-const BMO_PHRASES = [
-  "Who wants to play video games?",
-  "I am BMO! I am so smart!",
-  "Do you want to hear a song?",
-  "Beep boop beep!",
-  "I am a little living boy!",
-  "Let's go on an adventure!",
-  "Football, is that you?",
-  "I am more than a machine!",
-];
 
 const Index = () => {
   const [blinking, setBlinking] = useState(false);
@@ -29,24 +19,22 @@ const Index = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Speaking cycle
+  // Expose speaking control via window for external scripts
   useEffect(() => {
-    const speak = () => {
-      const phrase = BMO_PHRASES[Math.floor(Math.random() * BMO_PHRASES.length)];
-      setSpokenText(phrase);
+    (window as any).bmoSpeak = (text: string) => {
+      setSpokenText(text);
       setSpeaking(true);
       setTextVisible(true);
-
-      setTimeout(() => {
-        setTextVisible(false);
-        setTimeout(() => {
-          setSpeaking(false);
-        }, 400);
-      }, 3000);
     };
-    const timeout = setTimeout(speak, 6000 + Math.random() * 4000);
-    const interval = setInterval(speak, 12000 + Math.random() * 6000);
-    return () => { clearTimeout(timeout); clearInterval(interval); };
+    (window as any).bmoStopSpeaking = () => {
+      setSpeaking(false);
+      setTextVisible(false);
+      setSpokenText("");
+    };
+    return () => {
+      delete (window as any).bmoSpeak;
+      delete (window as any).bmoStopSpeaking;
+    };
   }, []);
 
   // Mouth animation cycle
