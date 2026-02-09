@@ -1,9 +1,23 @@
 import { useEffect, useState } from "react";
 
+const BMO_PHRASES = [
+  "Who wants to play video games?",
+  "I am BMO! I am so smart!",
+  "Do you want to hear a song?",
+  "Beep boop beep!",
+  "I am a little living boy!",
+  "Let's go on an adventure!",
+  "Football, is that you?",
+  "I am more than a machine!",
+];
+
 const Index = () => {
   const [blinking, setBlinking] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(false);
   const [idleOffset, setIdleOffset] = useState(0);
+  const [speaking, setSpeaking] = useState(false);
+  const [spokenText, setSpokenText] = useState("");
+  const [textVisible, setTextVisible] = useState(false);
 
   // Blink every 3-5 seconds
   useEffect(() => {
@@ -13,6 +27,26 @@ const Index = () => {
     };
     const interval = setInterval(blink, 3000 + Math.random() * 2000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Speaking cycle
+  useEffect(() => {
+    const speak = () => {
+      const phrase = BMO_PHRASES[Math.floor(Math.random() * BMO_PHRASES.length)];
+      setSpokenText(phrase);
+      setSpeaking(true);
+      setTextVisible(true);
+
+      setTimeout(() => {
+        setTextVisible(false);
+        setTimeout(() => {
+          setSpeaking(false);
+        }, 400);
+      }, 3000);
+    };
+    const timeout = setTimeout(speak, 6000 + Math.random() * 4000);
+    const interval = setInterval(speak, 12000 + Math.random() * 6000);
+    return () => { clearTimeout(timeout); clearInterval(interval); };
   }, []);
 
   // Mouth animation cycle
@@ -66,39 +100,72 @@ const Index = () => {
             boxShadow: "inset 0 3px 12px rgba(0,0,0,0.05)",
           }}
         >
-          {/* Face container */}
-          <div className="flex flex-col items-center" style={{ gap: "clamp(6px, 2vw, 12px)", marginTop: "-4%" }}>
-            {/* Eyes */}
-            <div className="flex items-center" style={{ gap: "clamp(16px, 5vw, 30px)" }}>
+          {/* Face mode */}
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{
+              opacity: speaking ? 0 : 1,
+              transition: "opacity 0.4s ease",
+              pointerEvents: speaking ? "none" : "auto",
+            }}
+          >
+            <div className="flex flex-col items-center" style={{ gap: "clamp(6px, 2vw, 12px)", marginTop: "-4%" }}>
+              {/* Eyes */}
+              <div className="flex items-center" style={{ gap: "clamp(16px, 5vw, 30px)" }}>
+                <div
+                  style={{
+                    width: "clamp(12px, 4vw, 22px)",
+                    height: blinking ? "3px" : "clamp(12px, 4vw, 22px)",
+                    backgroundColor: "#2a2a3d",
+                    borderRadius: blinking ? "2px" : "3px",
+                    transition: "height 0.08s ease",
+                  }}
+                />
+                <div
+                  style={{
+                    width: "clamp(12px, 4vw, 22px)",
+                    height: blinking ? "3px" : "clamp(12px, 4vw, 22px)",
+                    backgroundColor: "#2a2a3d",
+                    borderRadius: blinking ? "2px" : "3px",
+                    transition: "height 0.08s ease",
+                  }}
+                />
+              </div>
+              {/* Mouth */}
               <div
                 style={{
-                  width: "clamp(12px, 4vw, 22px)",
-                  height: blinking ? "3px" : "clamp(12px, 4vw, 22px)",
+                  width: "clamp(22px, 7vw, 38px)",
+                  height: mouthOpen ? "clamp(10px, 3vw, 16px)" : "clamp(3px, 1vw, 5px)",
                   backgroundColor: "#2a2a3d",
-                  borderRadius: blinking ? "2px" : "3px",
-                  transition: "height 0.08s ease",
-                }}
-              />
-              <div
-                style={{
-                  width: "clamp(12px, 4vw, 22px)",
-                  height: blinking ? "3px" : "clamp(12px, 4vw, 22px)",
-                  backgroundColor: "#2a2a3d",
-                  borderRadius: blinking ? "2px" : "3px",
-                  transition: "height 0.08s ease",
+                  borderRadius: mouthOpen ? "0 0 50% 50%" : "2px",
+                  transition: "all 0.3s ease",
                 }}
               />
             </div>
-            {/* Mouth */}
-            <div
+          </div>
+
+          {/* Text mode (speaking) */}
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{
+              opacity: textVisible ? 1 : 0,
+              transition: "opacity 0.4s ease",
+              pointerEvents: speaking ? "auto" : "none",
+              padding: "clamp(12px, 4vw, 24px)",
+            }}
+          >
+            <p
               style={{
-                width: "clamp(22px, 7vw, 38px)",
-                height: mouthOpen ? "clamp(10px, 3vw, 16px)" : "clamp(3px, 1vw, 5px)",
-                backgroundColor: "#2a2a3d",
-                borderRadius: mouthOpen ? "0 0 50% 50%" : "2px",
-                transition: "all 0.3s ease",
+                color: "#2a2a3d",
+                fontSize: "clamp(13px, 3.5vw, 18px)",
+                fontFamily: "'Courier New', monospace",
+                textAlign: "center",
+                lineHeight: 1.5,
+                letterSpacing: "0.02em",
               }}
-            />
+            >
+              {spokenText}
+            </p>
           </div>
         </div>
 
