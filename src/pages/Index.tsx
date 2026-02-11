@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 
 const Index = () => {
@@ -8,6 +8,11 @@ const Index = () => {
   const [speaking, setSpeaking] = useState(false);
   const [spokenText, setSpokenText] = useState("");
   const [textVisible, setTextVisible] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // Derived: button is disabled when listening or speaking
+  const buttonDisabled = busy || listening || speaking;
 
   // Blink every 3-5 seconds
   useEffect(() => {
@@ -25,17 +30,42 @@ const Index = () => {
       setSpokenText(text);
       setSpeaking(true);
       setTextVisible(true);
+      setListening(false);
+      setBusy(true);
     };
     (window as any).bmoStopSpeaking = () => {
       setSpeaking(false);
       setTextVisible(false);
       setSpokenText("");
+      setListening(false);
+      setBusy(false);
+    };
+    (window as any).bmoStartListening = () => {
+      setListening(true);
+      setSpeaking(true);
+      setTextVisible(false);
+      setSpokenText("");
+      setBusy(true);
+    };
+    (window as any).bmoShowUserSpeech = (text: string) => {
+      setSpokenText(text);
+      setTextVisible(true);
     };
     return () => {
       delete (window as any).bmoSpeak;
       delete (window as any).bmoStopSpeaking;
+      delete (window as any).bmoStartListening;
+      delete (window as any).bmoShowUserSpeech;
     };
   }, []);
+
+  const handleRedButtonClick = useCallback(() => {
+    if (buttonDisabled) return;
+    // Trigger external listening start if defined
+    if ((window as any).onBmoButtonPress) {
+      (window as any).onBmoButtonPress();
+    }
+  }, [buttonDisabled]);
 
   // Mouth animation cycle
   useEffect(() => {
@@ -132,14 +162,15 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Text mode (speaking) */}
+          {/* Text mode (speaking/listening) */}
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
               opacity: textVisible ? 1 : 0,
               transition: "opacity 0.4s ease",
               pointerEvents: speaking ? "auto" : "none",
-              padding: "clamp(12px, 4vw, 24px)",
+              padding: "clamp(16px, 5vw, 28px)",
+              overflow: "hidden",
             }}
           >
             <p
@@ -150,6 +181,9 @@ const Index = () => {
                 textAlign: "center",
                 lineHeight: 1.5,
                 letterSpacing: "0.02em",
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
+                maxWidth: "100%",
               }}
             >
               {spokenText}
@@ -226,13 +260,22 @@ const Index = () => {
             </div>
             {/* Big pink button */}
             <div
+              onClick={handleRedButtonClick}
+              role="button"
+              tabIndex={0}
               style={{
                 width: "clamp(30px, 9vw, 48px)",
                 height: "clamp(30px, 9vw, 48px)",
                 backgroundColor: "#f28da0",
                 borderRadius: "50%",
                 border: "2px solid #d4748a",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                boxShadow: listening
+                  ? "0 0 12px 4px rgba(242,141,160,0.5)"
+                  : "0 2px 6px rgba(0,0,0,0.08)",
+                transform: listening ? "scale(1.1)" : "scale(1)",
+                transition: "box-shadow 0.3s ease, transform 0.2s ease",
+                cursor: buttonDisabled ? "not-allowed" : "pointer",
+                opacity: buttonDisabled && !listening ? 0.6 : 1,
               }}
             />
           </div>
