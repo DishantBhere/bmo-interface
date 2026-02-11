@@ -10,6 +10,8 @@ const Index = () => {
   const [textVisible, setTextVisible] = useState(false);
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [dpadPressed, setDpadPressed] = useState(false);
+  const [trianglePressed, setTrianglePressed] = useState(false);
 
   // Derived: button is disabled when listening or speaking
   const buttonDisabled = busy || listening || speaking;
@@ -215,13 +217,21 @@ const Index = () => {
         {/* Controls area */}
         <div className="w-full flex items-start justify-between mt-[5%] px-[10%]">
           {/* D-Pad */}
-          <div className="relative" style={{ width: "clamp(42px, 13vw, 72px)", height: "clamp(42px, 13vw, 72px)" }}>
+          <div
+            className="relative"
+            style={{ width: "clamp(42px, 13vw, 72px)", height: "clamp(42px, 13vw, 72px)", cursor: "pointer" }}
+            onPointerDown={() => setDpadPressed(true)}
+            onPointerUp={() => setDpadPressed(false)}
+            onPointerLeave={() => setDpadPressed(false)}
+          >
             <div
               className="absolute top-1/2 left-0 w-full -translate-y-1/2"
               style={{
                 height: "33%",
                 backgroundColor: "#ddc64e",
                 borderRadius: "5px",
+                transform: `translateY(-50%) ${dpadPressed ? "scale(0.92)" : "scale(1)"}`,
+                transition: "transform 0.1s ease",
               }}
             />
             <div
@@ -230,6 +240,8 @@ const Index = () => {
                 width: "33%",
                 backgroundColor: "#ddc64e",
                 borderRadius: "5px",
+                transform: `translateX(-50%) ${dpadPressed ? "scale(0.92)" : "scale(1)"}`,
+                transition: "transform 0.1s ease",
               }}
             />
           </div>
@@ -239,12 +251,18 @@ const Index = () => {
             <div className="flex items-center" style={{ gap: "clamp(10px, 3vw, 20px)" }}>
               {/* Triangle button */}
               <div
+                onPointerDown={() => setTrianglePressed(true)}
+                onPointerUp={() => setTrianglePressed(false)}
+                onPointerLeave={() => setTrianglePressed(false)}
                 style={{
                   width: 0,
                   height: 0,
                   borderLeft: "clamp(6px, 2vw, 11px) solid transparent",
                   borderRight: "clamp(6px, 2vw, 11px) solid transparent",
                   borderBottom: "clamp(11px, 3.5vw, 19px) solid #8dcde0",
+                  transform: trianglePressed ? "scale(0.85)" : "scale(1)",
+                  transition: "transform 0.1s ease",
+                  cursor: "pointer",
                 }}
               />
               {/* Small green circle */}
