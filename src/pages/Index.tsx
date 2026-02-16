@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+
 const Index = () => {
   const [blinking, setBlinking] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(false);
@@ -12,6 +14,9 @@ const Index = () => {
   const [trianglePressed, setTrianglePressed] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [eyeOffset, setEyeOffset] = useState({ x: 0, y: 0 });
+  const [conversationHistory, setConversationHistory] = useState<
+    { role: "user" | "assistant"; content: string }[]
+  >([]);
 
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -36,38 +41,154 @@ const Index = () => {
 
   const activeEyeOffset = speaking ? { x: 0, y: 0 } : eyeOffset;
 
+  // Stream AI response
+  const streamAIResponse = useCallback(
+    async (messages: { role: "user" | "assistant"; content: string }[]) => {
+      const resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ messages }),
+      });
+
+      if (!resp.ok || !resp.body) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to get AI response");
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+      let fullResponse = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              fullResponse += content;
+              setSpokenText(fullResponse);
+            }
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
+        }
+      }
+
+      // Flush remaining
+      if (textBuffer.trim()) {
+        for (let raw of textBuffer.split("\n")) {
+          if (!raw) continue;
+          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
+          if (raw.startsWith(":") || raw.trim() === "") continue;
+          if (!raw.startsWith("data: ")) continue;
+          const jsonStr = raw.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              fullResponse += content;
+              setSpokenText(fullResponse);
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      return fullResponse;
+    },
+    []
+  );
+
   // Shared response flow
-  const handleResponse = useCallback((userText: string) => {
-    if (busy) return;
-    setBusy(true);
-    setSpeaking(true);
-    setTextVisible(true);
-    setSpokenText(userText);
+  const handleResponse = useCallback(
+    async (userText: string) => {
+      if (busy) return;
+      setBusy(true);
+      setSpeaking(true);
+      setTextVisible(true);
+      setSpokenText(userText);
 
-    setTimeout(() => {
-      const response = `I heard you say: ${userText}`;
-      setSpokenText(response);
+      const userMsg = { role: "user" as const, content: userText };
+      const newHistory = [...conversationHistory, userMsg];
 
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(response);
-      synthRef.current = utterance;
-      utterance.onend = () => {
-        setSpeaking(false);
-        setTextVisible(false);
-        setSpokenText("");
-        setBusy(false);
-        synthRef.current = null;
-      };
-      utterance.onerror = () => {
-        setSpeaking(false);
-        setTextVisible(false);
-        setSpokenText("");
-        setBusy(false);
-        synthRef.current = null;
-      };
-      window.speechSynthesis.speak(utterance);
-    }, 800);
-  }, [busy]);
+      // Brief delay to show user text
+      await new Promise((r) => setTimeout(r, 600));
+
+      try {
+        setSpokenText("...");
+        const aiResponse = await streamAIResponse(newHistory);
+
+        const assistantMsg = { role: "assistant" as const, content: aiResponse };
+        setConversationHistory([...newHistory, assistantMsg]);
+
+        // Speak the response
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(aiResponse);
+        synthRef.current = utterance;
+        utterance.onend = () => {
+          setSpeaking(false);
+          setTextVisible(false);
+          setSpokenText("");
+          setBusy(false);
+          synthRef.current = null;
+        };
+        utterance.onerror = () => {
+          setSpeaking(false);
+          setTextVisible(false);
+          setSpokenText("");
+          setBusy(false);
+          synthRef.current = null;
+        };
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.error("AI error:", err);
+        const fallback = "Oh no! BMO's brain got a little fuzzy. Try again?";
+        setSpokenText(fallback);
+
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(fallback);
+        synthRef.current = utterance;
+        utterance.onend = () => {
+          setSpeaking(false);
+          setTextVisible(false);
+          setSpokenText("");
+          setBusy(false);
+          synthRef.current = null;
+        };
+        utterance.onerror = () => {
+          setSpeaking(false);
+          setTextVisible(false);
+          setSpokenText("");
+          setBusy(false);
+          synthRef.current = null;
+        };
+        window.speechSynthesis.speak(utterance);
+      }
+    },
+    [busy, conversationHistory, streamAIResponse]
+  );
 
   // Text input submit
   const handleChatSubmit = useCallback(() => {
@@ -77,7 +198,7 @@ const Index = () => {
     handleResponse(text);
   }, [chatInput, busy, handleResponse]);
 
-  // Expose window API for external control
+  // Expose window API
   useEffect(() => {
     (window as any).bmoSpeak = (text: string) => {
       setSpokenText(text);
@@ -325,7 +446,7 @@ const Index = () => {
                 }}
               />
             </div>
-            {/* Big pink button (decorative now) */}
+            {/* Big pink button (decorative) */}
             <div
               style={{
                 width: "clamp(30px, 9vw, 48px)",
