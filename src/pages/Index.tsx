@@ -1,5 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
-
+import { useEffect, useState, useCallback, useRef } from "react";
 
 const Index = () => {
   const [blinking, setBlinking] = useState(false);
@@ -12,21 +11,112 @@ const Index = () => {
   const [busy, setBusy] = useState(false);
   const [dpadPressed, setDpadPressed] = useState(false);
   const [trianglePressed, setTrianglePressed] = useState(false);
+  const [chatInput, setChatInput] = useState("");
 
-  // Derived: button is disabled when listening or speaking
+  const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const recognitionRef = useRef<any>(null);
+
   const buttonDisabled = busy || listening || speaking;
 
-  // Blink every 3-5 seconds
-  useEffect(() => {
-    const blink = () => {
-      setBlinking(true);
-      setTimeout(() => setBlinking(false), 150);
-    };
-    const interval = setInterval(blink, 3000 + Math.random() * 2000);
-    return () => clearInterval(interval);
-  }, []);
+  // Shared response flow
+  const handleResponse = useCallback((userText: string) => {
+    if (busy) return;
+    setBusy(true);
+    setSpeaking(true);
+    setTextVisible(true);
+    setSpokenText(userText);
 
-  // Expose speaking control via window for external scripts
+    // Brief delay to show user text, then respond
+    setTimeout(() => {
+      const response = `I heard you say: ${userText}`;
+      setSpokenText(response);
+
+      // Speak using browser speech synthesis
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(response);
+      synthRef.current = utterance;
+      utterance.onend = () => {
+        setSpeaking(false);
+        setTextVisible(false);
+        setSpokenText("");
+        setBusy(false);
+        setListening(false);
+        synthRef.current = null;
+      };
+      utterance.onerror = () => {
+        setSpeaking(false);
+        setTextVisible(false);
+        setSpokenText("");
+        setBusy(false);
+        setListening(false);
+        synthRef.current = null;
+      };
+      window.speechSynthesis.speak(utterance);
+    }, 800);
+  }, [busy]);
+
+  // Voice recognition via red button
+  const handleRedButtonClick = useCallback(() => {
+    if (buttonDisabled) return;
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      return;
+    }
+
+    setListening(true);
+    setBusy(true);
+    setSpeaking(true);
+    setTextVisible(false);
+    setSpokenText("");
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setListening(false);
+      handleResponse(transcript);
+    };
+
+    recognition.onerror = () => {
+      setListening(false);
+      setSpeaking(false);
+      setTextVisible(false);
+      setSpokenText("");
+      setBusy(false);
+      recognitionRef.current = null;
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      // If still listening (no result came), reset
+      setListening((prev) => {
+        if (prev) {
+          setSpeaking(false);
+          setTextVisible(false);
+          setSpokenText("");
+          setBusy(false);
+        }
+        return false;
+      });
+    };
+
+    recognition.start();
+  }, [buttonDisabled, handleResponse]);
+
+  // Text input submit
+  const handleChatSubmit = useCallback(() => {
+    const text = chatInput.trim();
+    if (!text || busy) return;
+    setChatInput("");
+    handleResponse(text);
+  }, [chatInput, busy, handleResponse]);
+
+  // Expose window API for external control
   useEffect(() => {
     (window as any).bmoSpeak = (text: string) => {
       setSpokenText(text);
@@ -36,6 +126,7 @@ const Index = () => {
       setBusy(true);
     };
     (window as any).bmoStopSpeaking = () => {
+      window.speechSynthesis.cancel();
       setSpeaking(false);
       setTextVisible(false);
       setSpokenText("");
@@ -61,13 +152,25 @@ const Index = () => {
     };
   }, []);
 
-  const handleRedButtonClick = useCallback(() => {
-    if (buttonDisabled) return;
-    // Trigger external listening start if defined
-    if ((window as any).onBmoButtonPress) {
-      (window as any).onBmoButtonPress();
-    }
-  }, [buttonDisabled]);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Blink every 3-5 seconds
+  useEffect(() => {
+    const blink = () => {
+      setBlinking(true);
+      setTimeout(() => setBlinking(false), 150);
+    };
+    const interval = setInterval(blink, 3000 + Math.random() * 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Mouth animation cycle
   useEffect(() => {
@@ -92,7 +195,7 @@ const Index = () => {
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center overflow-hidden"
+      className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden"
       style={{ backgroundColor: "#7ccdb5" }}
     >
       {/* BMO Body */}
@@ -318,6 +421,62 @@ const Index = () => {
             }}
           />
         </div>
+      </div>
+
+      {/* Chat input bar */}
+      <div
+        className="fixed bottom-0 left-0 right-0 flex items-center"
+        style={{
+          padding: "clamp(8px, 2vw, 14px) clamp(12px, 3vw, 20px)",
+          backgroundColor: "rgba(95, 170, 147, 0.95)",
+          borderTop: "2px solid #5faa93",
+          gap: "clamp(6px, 2vw, 12px)",
+        }}
+      >
+        <input
+          type="text"
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleChatSubmit();
+          }}
+          disabled={busy}
+          placeholder="Talk to BMO..."
+          style={{
+            flex: 1,
+            padding: "clamp(8px, 2vw, 12px) clamp(10px, 3vw, 16px)",
+            borderRadius: "clamp(10px, 3vw, 18px)",
+            border: "2px solid #5faa93",
+            backgroundColor: "#d0dfca",
+            color: "#2a2a3d",
+            fontFamily: "'Courier New', monospace",
+            fontSize: "clamp(13px, 3.5vw, 16px)",
+            outline: "none",
+            opacity: busy ? 0.6 : 1,
+          }}
+        />
+        <button
+          onClick={handleChatSubmit}
+          disabled={busy || !chatInput.trim()}
+          style={{
+            width: "clamp(36px, 10vw, 48px)",
+            height: "clamp(36px, 10vw, 48px)",
+            borderRadius: "50%",
+            backgroundColor: "#f28da0",
+            border: "2px solid #d4748a",
+            cursor: busy || !chatInput.trim() ? "not-allowed" : "pointer",
+            opacity: busy || !chatInput.trim() ? 0.6 : 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "opacity 0.2s ease",
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2a2a3d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
       </div>
     </div>
   );
