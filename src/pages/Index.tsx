@@ -7,16 +7,34 @@ const Index = () => {
   const [speaking, setSpeaking] = useState(false);
   const [spokenText, setSpokenText] = useState("");
   const [textVisible, setTextVisible] = useState(false);
-  const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dpadPressed, setDpadPressed] = useState(false);
   const [trianglePressed, setTrianglePressed] = useState(false);
   const [chatInput, setChatInput] = useState("");
+  const [eyeOffset, setEyeOffset] = useState({ x: 0, y: 0 });
 
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const screenRef = useRef<HTMLDivElement>(null);
 
-  const buttonDisabled = busy || listening || speaking;
+  // Eye tracking
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!screenRef.current) return;
+      const rect = screenRef.current.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = e.clientX - cx;
+      const dy = e.clientY - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const max = 7;
+      const factor = Math.min(max / (dist || 1), 0.02);
+      setEyeOffset({ x: dx * factor, y: dy * factor });
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
+  const activeEyeOffset = speaking ? { x: 0, y: 0 } : eyeOffset;
 
   // Shared response flow
   const handleResponse = useCallback((userText: string) => {
@@ -26,12 +44,10 @@ const Index = () => {
     setTextVisible(true);
     setSpokenText(userText);
 
-    // Brief delay to show user text, then respond
     setTimeout(() => {
       const response = `I heard you say: ${userText}`;
       setSpokenText(response);
 
-      // Speak using browser speech synthesis
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(response);
       synthRef.current = utterance;
@@ -40,7 +56,6 @@ const Index = () => {
         setTextVisible(false);
         setSpokenText("");
         setBusy(false);
-        setListening(false);
         synthRef.current = null;
       };
       utterance.onerror = () => {
@@ -48,65 +63,11 @@ const Index = () => {
         setTextVisible(false);
         setSpokenText("");
         setBusy(false);
-        setListening(false);
         synthRef.current = null;
       };
       window.speechSynthesis.speak(utterance);
     }, 800);
   }, [busy]);
-
-  // Voice recognition via red button
-  const handleRedButtonClick = useCallback(() => {
-    if (buttonDisabled) return;
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      return;
-    }
-
-    setListening(true);
-    setBusy(true);
-    setSpeaking(true);
-    setTextVisible(false);
-    setSpokenText("");
-
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setListening(false);
-      handleResponse(transcript);
-    };
-
-    recognition.onerror = () => {
-      setListening(false);
-      setSpeaking(false);
-      setTextVisible(false);
-      setSpokenText("");
-      setBusy(false);
-      recognitionRef.current = null;
-    };
-
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      // If still listening (no result came), reset
-      setListening((prev) => {
-        if (prev) {
-          setSpeaking(false);
-          setTextVisible(false);
-          setSpokenText("");
-          setBusy(false);
-        }
-        return false;
-      });
-    };
-
-    recognition.start();
-  }, [buttonDisabled, handleResponse]);
 
   // Text input submit
   const handleChatSubmit = useCallback(() => {
@@ -122,7 +83,6 @@ const Index = () => {
       setSpokenText(text);
       setSpeaking(true);
       setTextVisible(true);
-      setListening(false);
       setBusy(true);
     };
     (window as any).bmoStopSpeaking = () => {
@@ -130,25 +90,11 @@ const Index = () => {
       setSpeaking(false);
       setTextVisible(false);
       setSpokenText("");
-      setListening(false);
       setBusy(false);
-    };
-    (window as any).bmoStartListening = () => {
-      setListening(true);
-      setSpeaking(true);
-      setTextVisible(false);
-      setSpokenText("");
-      setBusy(true);
-    };
-    (window as any).bmoShowUserSpeech = (text: string) => {
-      setSpokenText(text);
-      setTextVisible(true);
     };
     return () => {
       delete (window as any).bmoSpeak;
       delete (window as any).bmoStopSpeaking;
-      delete (window as any).bmoStartListening;
-      delete (window as any).bmoShowUserSpeech;
     };
   }, []);
 
@@ -156,9 +102,6 @@ const Index = () => {
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel();
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
     };
   }, []);
 
@@ -214,6 +157,7 @@ const Index = () => {
       >
         {/* Screen */}
         <div
+          ref={screenRef}
           className="relative w-full flex items-center justify-center"
           style={{
             aspectRatio: "5 / 3.5",
@@ -241,7 +185,8 @@ const Index = () => {
                     height: blinking ? "3px" : "clamp(12px, 4vw, 22px)",
                     backgroundColor: "#2a2a3d",
                     borderRadius: blinking ? "2px" : "3px",
-                    transition: "height 0.08s ease",
+                    transition: "height 0.08s ease, transform 0.15s ease-out",
+                    transform: `translate(${activeEyeOffset.x}px, ${activeEyeOffset.y}px)`,
                   }}
                 />
                 <div
@@ -250,7 +195,8 @@ const Index = () => {
                     height: blinking ? "3px" : "clamp(12px, 4vw, 22px)",
                     backgroundColor: "#2a2a3d",
                     borderRadius: blinking ? "2px" : "3px",
-                    transition: "height 0.08s ease",
+                    transition: "height 0.08s ease, transform 0.15s ease-out",
+                    transform: `translate(${activeEyeOffset.x}px, ${activeEyeOffset.y}px)`,
                   }}
                 />
               </div>
@@ -267,7 +213,7 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Text mode (speaking/listening) */}
+          {/* Text mode (speaking) */}
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
@@ -379,24 +325,15 @@ const Index = () => {
                 }}
               />
             </div>
-            {/* Big pink button */}
+            {/* Big pink button (decorative now) */}
             <div
-              onClick={handleRedButtonClick}
-              role="button"
-              tabIndex={0}
               style={{
                 width: "clamp(30px, 9vw, 48px)",
                 height: "clamp(30px, 9vw, 48px)",
                 backgroundColor: "#f28da0",
                 borderRadius: "50%",
                 border: "2px solid #d4748a",
-                boxShadow: listening
-                  ? "0 0 12px 4px rgba(242,141,160,0.5)"
-                  : "0 2px 6px rgba(0,0,0,0.08)",
-                transform: listening ? "scale(1.1)" : "scale(1)",
-                transition: "box-shadow 0.3s ease, transform 0.2s ease",
-                cursor: buttonDisabled ? "not-allowed" : "pointer",
-                opacity: buttonDisabled && !listening ? 0.6 : 1,
+                boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
               }}
             />
           </div>
