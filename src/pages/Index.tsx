@@ -20,6 +20,7 @@ const Index = () => {
   const [chatBarVisible, setChatBarVisible] = useState(true);
   const [chatBarAnimating, setChatBarAnimating] = useState(false);
   const chatBarTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -42,7 +43,7 @@ const Index = () => {
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
 
-  const activeEyeOffset = speaking ? { x: 0, y: 0 } : eyeOffset;
+  const activeEyeOffset = speaking || busy ? { x: 0, y: 0 } : eyeOffset;
 
   // Stream AI response
   const streamAIResponse = useCallback(
@@ -124,10 +125,47 @@ const Index = () => {
     []
   );
 
+  // Typing effect helper
+  const typeText = useCallback(
+    (text: string, token: { cancelled: boolean }): Promise<void> => {
+      return new Promise((resolve) => {
+        let i = 0;
+        const step = () => {
+          if (token.cancelled || i >= text.length) {
+            resolve();
+            return;
+          }
+          i++;
+          setSpokenText(text.slice(0, i));
+          setTimeout(step, 28 + Math.random() * 18);
+        };
+        step();
+      });
+    },
+    []
+  );
+
+  // Helper to create a voiced utterance
+  const createUtterance = useCallback((text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    const friendly =
+      voices.find((v) => /samantha|karen|fiona|victoria|zira/i.test(v.name)) ||
+      voices.find((v) => v.lang.startsWith("en") && /female/i.test(v.name)) ||
+      voices.find((v) => v.lang.startsWith("en")) ||
+      voices[0];
+    if (friendly) utterance.voice = friendly;
+    utterance.pitch = 1.15;
+    utterance.rate = 0.92;
+    return utterance;
+  }, []);
+
   // Shared response flow
   const handleResponse = useCallback(
     async (userText: string) => {
       if (busy) return;
+      const token = { cancelled: false };
+      typingRef.current = token;
       setBusy(true);
       setSpeaking(true);
       setTextVisible(true);
@@ -138,21 +176,18 @@ const Index = () => {
       try {
         setSpokenText("...");
         const aiResponse = await streamAIResponse(newHistory);
+        if (token.cancelled) return;
 
         const assistantMsg = { role: "assistant" as const, content: aiResponse };
         setConversationHistory([...newHistory, assistantMsg]);
 
-        // Speak the response with personality
+        // Type out the response character by character
+        await typeText(aiResponse, token);
+        if (token.cancelled) return;
+
+        // Start speech after typing completes
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(aiResponse);
-        const voices = window.speechSynthesis.getVoices();
-        const friendly = voices.find(v => /samantha|karen|fiona|victoria|zira/i.test(v.name))
-          || voices.find(v => v.lang.startsWith("en") && /female/i.test(v.name))
-          || voices.find(v => v.lang.startsWith("en"))
-          || voices[0];
-        if (friendly) utterance.voice = friendly;
-        utterance.pitch = 1.15;
-        utterance.rate = 0.92;
+        const utterance = createUtterance(aiResponse);
         synthRef.current = utterance;
         utterance.onend = () => {
           setSpeaking(false);
@@ -170,20 +205,15 @@ const Index = () => {
         };
         window.speechSynthesis.speak(utterance);
       } catch (err) {
+        if (token.cancelled) return;
         console.error("AI error:", err);
         const fallback = "Oh no! BMO's brain got a little fuzzy. Try again?";
-        setSpokenText(fallback);
+
+        await typeText(fallback, token);
+        if (token.cancelled) return;
 
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(fallback);
-        const voices = window.speechSynthesis.getVoices();
-        const friendly = voices.find(v => /samantha|karen|fiona|victoria|zira/i.test(v.name))
-          || voices.find(v => v.lang.startsWith("en") && /female/i.test(v.name))
-          || voices.find(v => v.lang.startsWith("en"))
-          || voices[0];
-        if (friendly) utterance.voice = friendly;
-        utterance.pitch = 1.15;
-        utterance.rate = 0.92;
+        const utterance = createUtterance(fallback);
         synthRef.current = utterance;
         utterance.onend = () => {
           setSpeaking(false);
@@ -202,11 +232,12 @@ const Index = () => {
         window.speechSynthesis.speak(utterance);
       }
     },
-    [busy, conversationHistory, streamAIResponse]
+    [busy, conversationHistory, streamAIResponse, typeText, createUtterance]
   );
 
-  // Red button: stop speech & reset to idle
+  // Red button: stop speech, typing & reset to idle
   const handleStop = useCallback(() => {
+    typingRef.current.cancelled = true;
     window.speechSynthesis.cancel();
     synthRef.current = null;
     setSpeaking(false);
@@ -318,7 +349,10 @@ const Index = () => {
             backgroundColor: "#d0dfca",
             borderRadius: "clamp(14px, 4vw, 24px)",
             border: "3px solid rgba(60,90,75,0.3)",
-            boxShadow: "inset 0 3px 12px rgba(0,0,0,0.05)",
+            boxShadow: speaking
+              ? "inset 0 3px 12px rgba(0,0,0,0.05), 0 0 18px 4px rgba(208,223,202,0.5)"
+              : "inset 0 3px 12px rgba(0,0,0,0.05)",
+            transition: "box-shadow 250ms ease",
           }}
         >
           {/* Face mode */}
