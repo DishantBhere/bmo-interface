@@ -131,13 +131,9 @@ const Index = () => {
       setBusy(true);
       setSpeaking(true);
       setTextVisible(true);
-      setSpokenText(userText);
 
       const userMsg = { role: "user" as const, content: userText };
       const newHistory = [...conversationHistory, userMsg];
-
-      // Brief delay to show user text
-      await new Promise((r) => setTimeout(r, 600));
 
       try {
         setSpokenText("...");
@@ -146,9 +142,17 @@ const Index = () => {
         const assistantMsg = { role: "assistant" as const, content: aiResponse };
         setConversationHistory([...newHistory, assistantMsg]);
 
-        // Speak the response
+        // Speak the response with personality
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(aiResponse);
+        const voices = window.speechSynthesis.getVoices();
+        const friendly = voices.find(v => /samantha|karen|fiona|victoria|zira/i.test(v.name))
+          || voices.find(v => v.lang.startsWith("en") && /female/i.test(v.name))
+          || voices.find(v => v.lang.startsWith("en"))
+          || voices[0];
+        if (friendly) utterance.voice = friendly;
+        utterance.pitch = 1.15;
+        utterance.rate = 0.92;
         synthRef.current = utterance;
         utterance.onend = () => {
           setSpeaking(false);
@@ -172,6 +176,14 @@ const Index = () => {
 
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(fallback);
+        const voices = window.speechSynthesis.getVoices();
+        const friendly = voices.find(v => /samantha|karen|fiona|victoria|zira/i.test(v.name))
+          || voices.find(v => v.lang.startsWith("en") && /female/i.test(v.name))
+          || voices.find(v => v.lang.startsWith("en"))
+          || voices[0];
+        if (friendly) utterance.voice = friendly;
+        utterance.pitch = 1.15;
+        utterance.rate = 0.92;
         synthRef.current = utterance;
         utterance.onend = () => {
           setSpeaking(false);
@@ -239,15 +251,23 @@ const Index = () => {
     };
   }, []);
 
-  // Blink every 3-5 seconds
+  // Blink every 3-6 seconds (idle only)
   useEffect(() => {
-    const blink = () => {
-      setBlinking(true);
-      setTimeout(() => setBlinking(false), 150);
+    if (speaking || busy) {
+      setBlinking(false);
+      return;
+    }
+    let timeout: ReturnType<typeof setTimeout>;
+    const scheduleBlink = () => {
+      timeout = setTimeout(() => {
+        setBlinking(true);
+        setTimeout(() => setBlinking(false), 120 + Math.random() * 60);
+        scheduleBlink();
+      }, 3000 + Math.random() * 3000);
     };
-    const interval = setInterval(blink, 3000 + Math.random() * 2000);
-    return () => clearInterval(interval);
-  }, []);
+    scheduleBlink();
+    return () => clearTimeout(timeout);
+  }, [speaking, busy]);
 
   // Mouth animation cycle
   useEffect(() => {
