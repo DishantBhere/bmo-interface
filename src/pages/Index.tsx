@@ -17,6 +17,7 @@ const Index = () => {
   const [conversationHistory, setConversationHistory] = useState<
     { role: "user" | "assistant"; content: string }[]
   >([]);
+  const [chatBarVisible, setChatBarVisible] = useState(true);
 
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -189,6 +190,16 @@ const Index = () => {
     },
     [busy, conversationHistory, streamAIResponse]
   );
+
+  // Red button: stop speech & reset to idle
+  const handleStop = useCallback(() => {
+    window.speechSynthesis.cancel();
+    synthRef.current = null;
+    setSpeaking(false);
+    setTextVisible(false);
+    setSpokenText("");
+    setBusy(false);
+  }, []);
 
   // Text input submit
   const handleChatSubmit = useCallback(() => {
@@ -391,7 +402,7 @@ const Index = () => {
             className="relative"
             style={{ width: "clamp(42px, 13vw, 72px)", height: "clamp(42px, 13vw, 72px)", cursor: "pointer" }}
             onPointerDown={() => setDpadPressed(true)}
-            onPointerUp={() => setDpadPressed(false)}
+            onPointerUp={() => { setDpadPressed(false); setChatBarVisible((v) => !v); }}
             onPointerLeave={() => setDpadPressed(false)}
           >
             <div
@@ -446,8 +457,9 @@ const Index = () => {
                 }}
               />
             </div>
-            {/* Big pink button (decorative) */}
+            {/* Big pink button (stop/reset) */}
             <div
+              onClick={handleStop}
               style={{
                 width: "clamp(30px, 9vw, 48px)",
                 height: "clamp(30px, 9vw, 48px)",
@@ -455,6 +467,7 @@ const Index = () => {
                 borderRadius: "50%",
                 border: "2px solid #d4748a",
                 boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                cursor: "pointer",
               }}
             />
           </div>
@@ -485,6 +498,7 @@ const Index = () => {
       <div
         className="fixed bottom-0 left-0 right-0 flex items-center"
         style={{
+          display: chatBarVisible ? "flex" : "none",
           padding: "clamp(8px, 2vw, 14px) clamp(12px, 3vw, 20px)",
           backgroundColor: "rgba(95, 170, 147, 0.95)",
           borderTop: "2px solid #5faa93",
