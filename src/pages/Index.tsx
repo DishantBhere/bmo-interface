@@ -18,6 +18,8 @@ const Index = () => {
     { role: "user" | "assistant"; content: string }[]
   >([]);
   const [chatBarVisible, setChatBarVisible] = useState(true);
+  const [chatBarAnimating, setChatBarAnimating] = useState(false);
+  const chatBarTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -402,7 +404,22 @@ const Index = () => {
             className="relative"
             style={{ width: "clamp(42px, 13vw, 72px)", height: "clamp(42px, 13vw, 72px)", cursor: "pointer" }}
             onPointerDown={() => setDpadPressed(true)}
-            onPointerUp={() => { setDpadPressed(false); setChatBarVisible((v) => !v); }}
+            onPointerUp={() => {
+              setDpadPressed(false);
+              if (chatBarTimeoutRef.current) clearTimeout(chatBarTimeoutRef.current);
+              if (chatBarVisible) {
+                // fade out then hide
+                setChatBarAnimating(true);
+                chatBarTimeoutRef.current = setTimeout(() => {
+                  setChatBarVisible(false);
+                  setChatBarAnimating(false);
+                }, 250);
+              } else {
+                // show then fade in
+                setChatBarVisible(true);
+                setChatBarAnimating(false);
+              }
+            }}
             onPointerLeave={() => setDpadPressed(false)}
           >
             <div
@@ -503,6 +520,9 @@ const Index = () => {
           backgroundColor: "rgba(95, 170, 147, 0.95)",
           borderTop: "2px solid #5faa93",
           gap: "clamp(6px, 2vw, 12px)",
+          opacity: chatBarVisible && !chatBarAnimating ? 1 : 0,
+          transform: chatBarVisible && !chatBarAnimating ? "translateY(0)" : "translateY(20px)",
+          transition: "opacity 250ms ease-out, transform 250ms ease-out",
         }}
       >
         <input
