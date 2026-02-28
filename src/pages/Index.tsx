@@ -16,7 +16,14 @@ const Index = () => {
   const [eyeOffset, setEyeOffset] = useState({ x: 0, y: 0 });
   const [conversationHistory, setConversationHistory] = useState<
     { role: "user" | "assistant"; content: string }[]
-  >([]);
+  >(() => {
+    try {
+      const saved = localStorage.getItem("bmo-conversation");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [chatBarVisible, setChatBarVisible] = useState(true);
   const [chatBarAnimating, setChatBarAnimating] = useState(false);
   const chatBarTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -125,22 +132,14 @@ const Index = () => {
     []
   );
 
-  // Typing effect helper
-  const typeText = useCallback(
-    (text: string, token: { cancelled: boolean }): Promise<void> => {
-      return new Promise((resolve) => {
-        let i = 0;
-        const step = () => {
-          if (token.cancelled || i >= text.length) {
-            resolve();
-            return;
-          }
-          i++;
-          setSpokenText(text.slice(0, i));
-          setTimeout(step, 28 + Math.random() * 18);
-        };
-        step();
-      });
+  // Persist conversation to localStorage
+  const saveConversation = useCallback(
+    (history: { role: "user" | "assistant"; content: string }[]) => {
+      try {
+        localStorage.setItem("bmo-conversation", JSON.stringify(history));
+      } catch {
+        /* storage full or unavailable */
+      }
     },
     []
   );
@@ -179,13 +178,12 @@ const Index = () => {
         if (token.cancelled) return;
 
         const assistantMsg = { role: "assistant" as const, content: aiResponse };
-        setConversationHistory([...newHistory, assistantMsg]);
+        const updatedHistory = [...newHistory, assistantMsg];
+        setConversationHistory(updatedHistory);
+        saveConversation(updatedHistory);
 
-        // Type out the response character by character
-        await typeText(aiResponse, token);
-        if (token.cancelled) return;
-
-        // Start speech after typing completes
+        // Show full text and start speech immediately
+        setSpokenText(aiResponse);
         window.speechSynthesis.cancel();
         const utterance = createUtterance(aiResponse);
         synthRef.current = utterance;
@@ -209,9 +207,7 @@ const Index = () => {
         console.error("AI error:", err);
         const fallback = "Oh no! BMO's brain got a little fuzzy. Try again?";
 
-        await typeText(fallback, token);
-        if (token.cancelled) return;
-
+        setSpokenText(fallback);
         window.speechSynthesis.cancel();
         const utterance = createUtterance(fallback);
         synthRef.current = utterance;
@@ -232,7 +228,7 @@ const Index = () => {
         window.speechSynthesis.speak(utterance);
       }
     },
-    [busy, conversationHistory, streamAIResponse, typeText, createUtterance]
+    [busy, conversationHistory, streamAIResponse, createUtterance, saveConversation]
   );
 
   // Red button: stop speech, typing & reset to idle
