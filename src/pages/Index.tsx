@@ -4,6 +4,8 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 const Index = () => {
   const [blinking, setBlinking] = useState(false);
+  const [greenPressed, setGreenPressed] = useState(false);
+  const [pinkPressed, setPinkPressed] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(false);
   const [idleOffset, setIdleOffset] = useState(0);
   const [speaking, setSpeaking] = useState(false);
@@ -42,12 +44,21 @@ const Index = () => {
       const dx = e.clientX - cx;
       const dy = e.clientY - cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const max = 7;
-      const factor = Math.min(max / (dist || 1), 0.02);
+      const maxDist = 400;
+      const intensity = Math.min(1, dist / maxDist);
+      const max = 5 + intensity * 4;
+      const factor = Math.min(max / (dist || 1), 0.025);
       setEyeOffset({ x: dx * factor, y: dy * factor });
     };
+    const handleMouseLeave = () => {
+      setEyeOffset({ x: 0, y: 0 });
+    };
     window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseleave", handleMouseLeave);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseleave", handleMouseLeave);
+    };
   }, []);
 
   const activeEyeOffset = speaking || busy ? { x: 0, y: 0 } : eyeOffset;
@@ -346,12 +357,26 @@ const Index = () => {
             borderRadius: "clamp(14px, 4vw, 24px)",
             border: "3px solid rgba(60,90,75,0.3)",
             boxShadow: speaking
-              ? "inset 0 3px 12px rgba(0,0,0,0.05), 0 0 18px 4px rgba(208,223,202,0.5)"
-              : "inset 0 3px 12px rgba(0,0,0,0.05)",
+              ? "inset 0 3px 12px rgba(0,0,0,0.08), inset 0 1px 4px rgba(0,0,0,0.04), 0 0 18px 4px rgba(208,223,202,0.5)"
+              : "inset 0 3px 12px rgba(0,0,0,0.08), inset 0 1px 4px rgba(0,0,0,0.04)",
             transition: "box-shadow 250ms ease",
+            overflow: "hidden",
           }}
         >
-          {/* Face mode */}
+          {/* Glass highlight */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "40%",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 100%)",
+              borderRadius: "inherit",
+              pointerEvents: "none",
+              zIndex: 10,
+            }}
+          />
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
@@ -515,27 +540,45 @@ const Index = () => {
               />
               {/* Small green circle */}
               <div
+                onPointerDown={() => setGreenPressed(true)}
+                onPointerUp={() => setGreenPressed(false)}
+                onPointerLeave={() => setGreenPressed(false)}
                 style={{
                   width: "clamp(12px, 3.5vw, 20px)",
                   height: "clamp(12px, 3.5vw, 20px)",
                   backgroundColor: "#b5de5a",
                   borderRadius: "50%",
                   border: "2px solid #8fb84a",
+                  transform: greenPressed ? "scale(0.92)" : "scale(1)",
+                  boxShadow: greenPressed ? "0 1px 2px rgba(0,0,0,0.1)" : "0 2px 4px rgba(0,0,0,0.08)",
+                  transition: "transform 120ms ease, box-shadow 120ms ease, filter 150ms ease",
+                  cursor: "pointer",
+                  filter: "brightness(1)",
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.08)")}
+                onMouseLeave={(e) => { (e.currentTarget.style.filter = "brightness(1)"); setGreenPressed(false); }}
               />
             </div>
             {/* Big pink button (stop/reset) */}
             <div
               onClick={handleStop}
+              onPointerDown={() => setPinkPressed(true)}
+              onPointerUp={() => setPinkPressed(false)}
+              onPointerLeave={() => setPinkPressed(false)}
               style={{
                 width: "clamp(30px, 9vw, 48px)",
                 height: "clamp(30px, 9vw, 48px)",
                 backgroundColor: "#f28da0",
                 borderRadius: "50%",
                 border: "2px solid #d4748a",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                boxShadow: pinkPressed ? "0 1px 2px rgba(0,0,0,0.1)" : "0 2px 6px rgba(0,0,0,0.08)",
+                transform: pinkPressed ? "scale(0.93)" : "scale(1)",
+                transition: "transform 120ms ease, box-shadow 120ms ease, filter 150ms ease",
                 cursor: "pointer",
+                filter: "brightness(1)",
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.08)")}
+              onMouseLeave={(e) => { (e.currentTarget.style.filter = "brightness(1)"); setPinkPressed(false); }}
             />
           </div>
         </div>
