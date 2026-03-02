@@ -342,7 +342,7 @@ const Index = () => {
           backgroundColor: "#7ccdb5",
           borderRadius: "clamp(24px, 6vw, 40px)",
           border: "3px solid #5faa93",
-          boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.08)",
           transform: `translateY(${idleOffset}px)`,
           transition: "transform 0.1s linear",
         }}
@@ -353,25 +353,25 @@ const Index = () => {
           className="relative w-full flex items-center justify-center"
           style={{
             aspectRatio: "5 / 3.5",
-            backgroundColor: "#d0dfca",
+            background: "linear-gradient(180deg, #d6e4cf 0%, #c8d8c2 100%)",
             borderRadius: "clamp(14px, 4vw, 24px)",
-            border: "3px solid rgba(60,90,75,0.3)",
+            border: "3px solid rgba(60,90,75,0.25)",
             boxShadow: speaking
-              ? "inset 0 3px 12px rgba(0,0,0,0.08), inset 0 1px 4px rgba(0,0,0,0.04), 0 0 18px 4px rgba(208,223,202,0.5)"
-              : "inset 0 3px 12px rgba(0,0,0,0.08), inset 0 1px 4px rgba(0,0,0,0.04)",
+              ? "inset 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 3px rgba(0,0,0,0.06), 0 0 20px 5px rgba(208,223,202,0.55)"
+              : "inset 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 3px rgba(0,0,0,0.06)",
             transition: "box-shadow 250ms ease",
             overflow: "hidden",
           }}
         >
-          {/* Glass highlight */}
+          {/* Glass highlight - top-left reflection */}
           <div
             style={{
               position: "absolute",
               top: 0,
               left: 0,
-              right: 0,
-              height: "40%",
-              background: "linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 100%)",
+              width: "60%",
+              height: "35%",
+              background: "radial-gradient(ellipse at 25% 20%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 60%, transparent 100%)",
               borderRadius: "inherit",
               pointerEvents: "none",
               zIndex: 10,
@@ -435,15 +435,16 @@ const Index = () => {
           >
             <p
               style={{
-                color: "#2a2a3d",
+                color: "#3a3a50",
                 fontSize: "clamp(13px, 3.5vw, 18px)",
                 fontFamily: "'Courier New', monospace",
                 textAlign: "center",
-                lineHeight: 1.5,
+                lineHeight: 1.65,
                 letterSpacing: "0.02em",
                 wordBreak: "break-word",
                 overflowWrap: "break-word",
-                maxWidth: "100%",
+                maxWidth: "92%",
+                padding: "0 4px",
               }}
             >
               {spokenText}
@@ -609,9 +610,12 @@ const Index = () => {
         className="fixed bottom-0 left-0 right-0 flex items-center"
         style={{
           display: chatBarVisible ? "flex" : "none",
-          padding: "clamp(8px, 2vw, 14px) clamp(12px, 3vw, 20px)",
-          backgroundColor: "rgba(95, 170, 147, 0.95)",
-          borderTop: "2px solid #5faa93",
+          padding: "clamp(10px, 2.5vw, 16px) clamp(12px, 3vw, 20px)",
+          backgroundColor: "rgba(90, 160, 140, 0.85)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          borderTop: "1px solid rgba(95, 170, 147, 0.5)",
+          boxShadow: "0 -4px 20px rgba(0,0,0,0.08)",
           gap: "clamp(6px, 2vw, 12px)",
           opacity: chatBarVisible && !chatBarAnimating ? 1 : 0,
           transform: chatBarVisible && !chatBarAnimating ? "translateY(0)" : "translateY(20px)",
