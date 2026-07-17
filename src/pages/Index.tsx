@@ -63,6 +63,16 @@ const Index = () => {
 
   const activeEyeOffset = speaking || busy ? { x: 0, y: 0 } : eyeOffset;
 
+  // Strip [emotion: ...] tag (and any trailing partial "[emotion" during streaming)
+  const stripEmotion = (text: string) => {
+    return text
+      .replace(/\n?\s*\[emotion:\s*[^\]]*\]\s*$/i, "")
+      .replace(/\n?\s*\[emotion:?[^\]]*$/i, "")
+      .trimEnd();
+  };
+
+
+
   // Stream AI response
   const streamAIResponse = useCallback(
     async (messages: { role: "user" | "assistant"; content: string }[]) => {
@@ -107,7 +117,7 @@ const Index = () => {
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               fullResponse += content;
-              setSpokenText(fullResponse);
+              setSpokenText(stripEmotion(fullResponse));
             }
           } catch {
             textBuffer = line + "\n" + textBuffer;
@@ -130,7 +140,7 @@ const Index = () => {
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               fullResponse += content;
-              setSpokenText(fullResponse);
+              setSpokenText(stripEmotion(fullResponse));
             }
           } catch {
             /* ignore */
@@ -138,7 +148,7 @@ const Index = () => {
         }
       }
 
-      return fullResponse;
+      return stripEmotion(fullResponse);
     },
     []
   );
