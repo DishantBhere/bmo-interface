@@ -117,7 +117,7 @@ const Index = () => {
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               fullResponse += content;
-              setSpokenText(fullResponse);
+              setSpokenText(stripEmotion(fullResponse));
             }
           } catch {
             textBuffer = line + "\n" + textBuffer;
@@ -140,7 +140,7 @@ const Index = () => {
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               fullResponse += content;
-              setSpokenText(fullResponse);
+              setSpokenText(stripEmotion(fullResponse));
             }
           } catch {
             /* ignore */
