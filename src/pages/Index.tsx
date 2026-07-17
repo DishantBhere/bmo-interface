@@ -63,6 +63,16 @@ const Index = () => {
 
   const activeEyeOffset = speaking || busy ? { x: 0, y: 0 } : eyeOffset;
 
+  // Strip [emotion: ...] tag (and any trailing partial "[emotion" during streaming)
+  const stripEmotion = (text: string) => {
+    return text
+      .replace(/\n?\s*\[emotion:\s*[^\]]*\]\s*$/i, "")
+      .replace(/\n?\s*\[emotion:?[^\]]*$/i, "")
+      .trimEnd();
+  };
+
+
+
   // Stream AI response
   const streamAIResponse = useCallback(
     async (messages: { role: "user" | "assistant"; content: string }[]) => {
