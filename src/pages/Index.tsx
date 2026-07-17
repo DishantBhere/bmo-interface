@@ -148,7 +148,7 @@ const Index = () => {
         }
       }
 
-      return fullResponse;
+      return stripEmotion(fullResponse);
     },
     []
   );
