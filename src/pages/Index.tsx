@@ -1,17 +1,192 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+
+type Emotion =
+  | "happy"
+  | "sleepy"
+  | "surprised"
+  | "confused"
+  | "excited"
+  | "neutral"
+  | "talking";
+
+// ============ BMO Face (SVG) ============
+const BmoFace = ({
+  emotion,
+  blinking,
+  eyeOffset,
+  talkingOpen,
+}: {
+  emotion: Emotion;
+  blinking: boolean;
+  eyeOffset: { x: number; y: number };
+  talkingOpen: boolean;
+}) => {
+  // viewBox coordinates
+  const leftEyeCx = 34;
+  const rightEyeCx = 66;
+  const eyeCy = 40;
+  const ox = eyeOffset.x;
+  const oy = eyeOffset.y;
+
+  const renderEye = (cx: number, side: "left" | "right") => {
+    if (blinking) {
+      return (
+        <rect
+          x={cx - 8 + ox}
+          y={eyeCy - 1 + oy}
+          width={16}
+          height={2.5}
+          rx={1.2}
+          fill="#2a2a3d"
+        />
+      );
+    }
+    switch (emotion) {
+      case "happy":
+        // curved-up arc (^)
+        return (
+          <path
+            d={`M ${cx - 8 + ox} ${eyeCy + 4 + oy} Q ${cx + ox} ${eyeCy - 8 + oy} ${cx + 8 + ox} ${eyeCy + 4 + oy}`}
+            stroke="#2a2a3d"
+            strokeWidth={3.5}
+            strokeLinecap="round"
+            fill="none"
+          />
+        );
+      case "sleepy":
+        return (
+          <rect
+            x={cx - 8 + ox}
+            y={eyeCy - 1 + oy}
+            width={16}
+            height={2.5}
+            rx={1.2}
+            fill="#2a2a3d"
+          />
+        );
+      case "surprised":
+        return (
+          <circle
+            cx={cx + ox}
+            cy={eyeCy + oy}
+            r={8}
+            fill="none"
+            stroke="#2a2a3d"
+            strokeWidth={2.5}
+          />
+        );
+      case "confused": {
+        const isSmall = side === "right";
+        const size = isSmall ? 10 : 14;
+        const rot = isSmall ? 15 : 0;
+        return (
+          <rect
+            x={cx - size / 2 + ox}
+            y={eyeCy - size / 2 + oy}
+            width={size}
+            height={size}
+            rx={2}
+            fill="#2a2a3d"
+            transform={`rotate(${rot} ${cx + ox} ${eyeCy + oy})`}
+          />
+        );
+      }
+      case "excited":
+        return (
+          <circle cx={cx + ox} cy={eyeCy + oy} r={9} fill="#2a2a3d" />
+        );
+      case "talking":
+      case "neutral":
+      default:
+        return (
+          <rect
+            x={cx - 7 + ox}
+            y={eyeCy - 7 + oy}
+            width={14}
+            height={14}
+            rx={2.5}
+            fill="#2a2a3d"
+          />
+        );
+    }
+  };
+
+  const renderMouth = () => {
+    switch (emotion) {
+      case "happy":
+        return (
+          <path
+            d="M 38 66 Q 50 76 62 66"
+            stroke="#2a2a3d"
+            strokeWidth={3.5}
+            strokeLinecap="round"
+            fill="none"
+          />
+        );
+      case "sleepy":
+        return <circle cx={50} cy={68} r={2} fill="#2a2a3d" />;
+      case "surprised":
+        return (
+          <ellipse cx={50} cy={68} rx={5} ry={6} fill="none" stroke="#2a2a3d" strokeWidth={2.5} />
+        );
+      case "confused":
+        return (
+          <path
+            d="M 40 68 Q 44 64 48 68 T 56 68 T 62 68"
+            stroke="#2a2a3d"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            fill="none"
+          />
+        );
+      case "excited":
+        return (
+          <path
+            d="M 36 62 Q 50 78 64 62 Q 50 72 36 62 Z"
+            fill="#2a2a3d"
+          />
+        );
+      case "talking":
+        return talkingOpen ? (
+          <ellipse cx={50} cy={68} rx={7} ry={4.5} fill="#2a2a3d" />
+        ) : (
+          <rect x={44} y={67} width={12} height={2.5} rx={1.2} fill="#2a2a3d" />
+        );
+      case "neutral":
+      default:
+        return <rect x={44} y={67} width={12} height={2.5} rx={1.2} fill="#2a2a3d" />;
+    }
+  };
+
+  return (
+    <svg
+      viewBox="0 0 100 90"
+      style={{ width: "62%", maxWidth: 220, overflow: "visible" }}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <g style={{ transition: "opacity 200ms ease" }}>
+        {renderEye(leftEyeCx, "left")}
+        {renderEye(rightEyeCx, "right")}
+        {renderMouth()}
+      </g>
+    </svg>
+  );
+};
 
 const Index = () => {
   const [blinking, setBlinking] = useState(false);
   const [greenPressed, setGreenPressed] = useState(false);
   const [pinkPressed, setPinkPressed] = useState(false);
-  const [mouthOpen, setMouthOpen] = useState(false);
+  const [talkingOpen, setTalkingOpen] = useState(false);
   const [idleOffset, setIdleOffset] = useState(0);
   const [speaking, setSpeaking] = useState(false);
   const [spokenText, setSpokenText] = useState("");
   const [textVisible, setTextVisible] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [thinking, setThinking] = useState(false);
+  const [emotion, setEmotion] = useState<Emotion>("neutral");
   const [dpadPressed, setDpadPressed] = useState(false);
   const [trianglePressed, setTrianglePressed] = useState(false);
   const [chatInput, setChatInput] = useState("");
@@ -30,6 +205,7 @@ const Index = () => {
   const [chatBarAnimating, setChatBarAnimating] = useState(false);
   const chatBarTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -46,13 +222,11 @@ const Index = () => {
       const dist = Math.sqrt(dx * dx + dy * dy);
       const maxDist = 400;
       const intensity = Math.min(1, dist / maxDist);
-      const max = 5 + intensity * 4;
-      const factor = Math.min(max / (dist || 1), 0.025);
+      const max = 3 + intensity * 3;
+      const factor = Math.min(max / (dist || 1), 0.02);
       setEyeOffset({ x: dx * factor, y: dy * factor });
     };
-    const handleMouseLeave = () => {
-      setEyeOffset({ x: 0, y: 0 });
-    };
+    const handleMouseLeave = () => setEyeOffset({ x: 0, y: 0 });
     window.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseleave", handleMouseLeave);
     return () => {
@@ -63,15 +237,17 @@ const Index = () => {
 
   const activeEyeOffset = speaking || busy ? { x: 0, y: 0 } : eyeOffset;
 
-  // Strip [emotion: ...] tag (and any trailing partial "[emotion" during streaming)
-  const stripEmotion = (text: string) => {
-    return text
+  // Parse & strip emotion tag
+  const stripEmotion = (text: string) =>
+    text
       .replace(/\n?\s*\[emotion:\s*[^\]]*\]\s*$/i, "")
       .replace(/\n?\s*\[emotion:?[^\]]*$/i, "")
       .trimEnd();
+
+  const parseEmotion = (text: string): Emotion | null => {
+    const m = text.match(/\[emotion:\s*(happy|sleepy|surprised|confused|excited|neutral)\s*\]/i);
+    return m ? (m[1].toLowerCase() as Emotion) : null;
   };
-
-
 
   // Stream AI response
   const streamAIResponse = useCallback(
@@ -115,10 +291,7 @@ const Index = () => {
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              fullResponse += content;
-              setSpokenText(stripEmotion(fullResponse));
-            }
+            if (content) fullResponse += content;
           } catch {
             textBuffer = line + "\n" + textBuffer;
             break;
@@ -126,7 +299,6 @@ const Index = () => {
         }
       }
 
-      // Flush remaining
       if (textBuffer.trim()) {
         for (let raw of textBuffer.split("\n")) {
           if (!raw) continue;
@@ -138,34 +310,30 @@ const Index = () => {
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              fullResponse += content;
-              setSpokenText(stripEmotion(fullResponse));
-            }
+            if (content) fullResponse += content;
           } catch {
             /* ignore */
           }
         }
       }
 
-      return stripEmotion(fullResponse);
+      const parsedEmotion = parseEmotion(fullResponse);
+      return { text: stripEmotion(fullResponse), emotion: parsedEmotion };
     },
     []
   );
 
-  // Persist conversation to localStorage
   const saveConversation = useCallback(
     (history: { role: "user" | "assistant"; content: string }[]) => {
       try {
         localStorage.setItem("bmo-conversation", JSON.stringify(history));
       } catch {
-        /* storage full or unavailable */
+        /* ignore */
       }
     },
     []
   );
 
-  // Helper to create a voiced utterance
   const createUtterance = useCallback((text: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
@@ -180,22 +348,22 @@ const Index = () => {
     return utterance;
   }, []);
 
-  // Shared response flow
   const handleResponse = useCallback(
     async (userText: string) => {
       if (busy) return;
       const token = { cancelled: false };
       typingRef.current = token;
       setBusy(true);
-      setSpeaking(true);
-      setTextVisible(true);
+      setThinking(true);
+      setTextVisible(false);
+      setSpokenText("");
 
       const userMsg = { role: "user" as const, content: userText };
       const newHistory = [...conversationHistory, userMsg];
+      setConversationHistory(newHistory);
 
       try {
-        setSpokenText("...");
-        const aiResponse = await streamAIResponse(newHistory);
+        const { text: aiResponse, emotion: parsedEmotion } = await streamAIResponse(newHistory);
         if (token.cancelled) return;
 
         const assistantMsg = { role: "assistant" as const, content: aiResponse };
@@ -203,67 +371,66 @@ const Index = () => {
         setConversationHistory(updatedHistory);
         saveConversation(updatedHistory);
 
-        // Show full text and start speech immediately
+        setThinking(false);
+        setSpeaking(true);
+        setTextVisible(true);
+        if (parsedEmotion) setEmotion(parsedEmotion);
         setSpokenText(aiResponse);
+
         window.speechSynthesis.cancel();
         const utterance = createUtterance(aiResponse);
         synthRef.current = utterance;
-        utterance.onend = () => {
+        const finish = () => {
           setSpeaking(false);
           setTextVisible(false);
           setSpokenText("");
           setBusy(false);
+          setEmotion("neutral");
           synthRef.current = null;
         };
-        utterance.onerror = () => {
-          setSpeaking(false);
-          setTextVisible(false);
-          setSpokenText("");
-          setBusy(false);
-          synthRef.current = null;
-        };
+        utterance.onend = finish;
+        utterance.onerror = finish;
         window.speechSynthesis.speak(utterance);
       } catch (err) {
         if (token.cancelled) return;
         console.error("AI error:", err);
         const fallback = "Oh no! BMO's brain got a little fuzzy. Try again?";
-
+        setThinking(false);
+        setSpeaking(true);
+        setTextVisible(true);
+        setEmotion("confused");
         setSpokenText(fallback);
         window.speechSynthesis.cancel();
         const utterance = createUtterance(fallback);
         synthRef.current = utterance;
-        utterance.onend = () => {
+        const finish = () => {
           setSpeaking(false);
           setTextVisible(false);
           setSpokenText("");
           setBusy(false);
+          setEmotion("neutral");
           synthRef.current = null;
         };
-        utterance.onerror = () => {
-          setSpeaking(false);
-          setTextVisible(false);
-          setSpokenText("");
-          setBusy(false);
-          synthRef.current = null;
-        };
+        utterance.onend = finish;
+        utterance.onerror = finish;
         window.speechSynthesis.speak(utterance);
       }
     },
     [busy, conversationHistory, streamAIResponse, createUtterance, saveConversation]
   );
 
-  // Red button: stop speech, typing & reset to idle
   const handleStop = useCallback(() => {
     typingRef.current.cancelled = true;
     window.speechSynthesis.cancel();
     synthRef.current = null;
     setSpeaking(false);
+    setThinking(false);
     setTextVisible(false);
     setSpokenText("");
     setBusy(false);
+    setEmotion("neutral");
   }, []);
 
-  // Text input submit
   const handleChatSubmit = useCallback(() => {
     const text = chatInput.trim();
     if (!text || busy) return;
@@ -271,7 +438,6 @@ const Index = () => {
     handleResponse(text);
   }, [chatInput, busy, handleResponse]);
 
-  // Expose window API
   useEffect(() => {
     (window as any).bmoSpeak = (text: string) => {
       setSpokenText(text);
@@ -292,40 +458,35 @@ const Index = () => {
     };
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      window.speechSynthesis.cancel();
-    };
-  }, []);
+  useEffect(() => () => window.speechSynthesis.cancel(), []);
 
-  // Blink every 3-6 seconds (idle only)
+  // Blink independent of emotion, 4-6s random
   useEffect(() => {
-    if (speaking || busy) {
-      setBlinking(false);
-      return;
-    }
     let timeout: ReturnType<typeof setTimeout>;
     const scheduleBlink = () => {
       timeout = setTimeout(() => {
         setBlinking(true);
-        setTimeout(() => setBlinking(false), 120 + Math.random() * 60);
+        setTimeout(() => setBlinking(false), 110 + Math.random() * 70);
         scheduleBlink();
-      }, 3000 + Math.random() * 3000);
+      }, 4000 + Math.random() * 2000);
     };
     scheduleBlink();
     return () => clearTimeout(timeout);
-  }, [speaking, busy]);
-
-  // Mouth animation cycle
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMouthOpen((prev) => !prev);
-    }, 2000 + Math.random() * 1500);
-    return () => clearInterval(interval);
   }, []);
 
-  // Subtle idle bob
+  // Talking mouth cycle
+  useEffect(() => {
+    if (!speaking) {
+      setTalkingOpen(false);
+      return;
+    }
+    const interval = setInterval(() => {
+      setTalkingOpen((p) => !p);
+    }, 180);
+    return () => clearInterval(interval);
+  }, [speaking]);
+
+  // Idle bob
   useEffect(() => {
     let frame: number;
     let t = 0;
@@ -338,11 +499,42 @@ const Index = () => {
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  // Auto-scroll bubbles
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [conversationHistory, thinking]);
+
+  const currentEmotion: Emotion = speaking ? "talking" : emotion;
+
+  const screenBg = useMemo(() => {
+    if (currentEmotion === "happy" || currentEmotion === "excited") {
+      return "linear-gradient(180deg, #dee3c4 0%, #cfd6b6 100%)";
+    }
+    if (currentEmotion === "sleepy") {
+      return "linear-gradient(180deg, #c5d2cf 0%, #b5c3c1 100%)";
+    }
+    return "linear-gradient(180deg, #d6e4cf 0%, #c8d8c2 100%)";
+  }, [currentEmotion]);
+
+  const hasConversation = conversationHistory.length > 0;
+
   return (
     <div
       className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden"
       style={{ backgroundColor: "#7ccdb5" }}
     >
+      {/* Inline keyframes */}
+      <style>{`
+        @keyframes bmo-bounce-dot {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+          40% { transform: translateY(-6px); opacity: 1; }
+        }
+        @keyframes bmo-thinking-glow {
+          0%, 100% { box-shadow: inset 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 3px rgba(0,0,0,0.06), 0 0 12px 3px rgba(255,220,140,0.35); }
+          50% { box-shadow: inset 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 3px rgba(0,0,0,0.06), 0 0 22px 8px rgba(255,220,140,0.6); }
+        }
+      `}</style>
+
       {/* BMO Body */}
       <div
         className="relative flex flex-col items-center"
@@ -352,7 +544,7 @@ const Index = () => {
           backgroundColor: "#7ccdb5",
           borderRadius: "clamp(24px, 6vw, 40px)",
           border: "3px solid #5faa93",
-          boxShadow: "0 12px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.08)",
+          boxShadow: `0 ${12 + idleOffset * 0.5}px ${40 - idleOffset * 0.8}px rgba(0,0,0,${0.15 - idleOffset * 0.005}), 0 4px 12px rgba(0,0,0,0.08)`,
           transform: `translateY(${idleOffset}px)`,
           transition: "transform 0.1s linear",
         }}
@@ -363,17 +555,33 @@ const Index = () => {
           className="relative w-full flex items-center justify-center"
           style={{
             aspectRatio: "5 / 3.5",
-            background: "linear-gradient(180deg, #d6e4cf 0%, #c8d8c2 100%)",
+            background: screenBg,
             borderRadius: "clamp(14px, 4vw, 24px)",
             border: "3px solid rgba(60,90,75,0.25)",
-            boxShadow: speaking
+            boxShadow: thinking
+              ? undefined
+              : speaking
               ? "inset 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 3px rgba(0,0,0,0.06), 0 0 20px 5px rgba(208,223,202,0.55)"
               : "inset 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 3px rgba(0,0,0,0.06)",
-            transition: "box-shadow 250ms ease",
+            animation: thinking ? "bmo-thinking-glow 1.4s ease-in-out infinite" : undefined,
+            transition: "background 400ms ease, box-shadow 250ms ease",
             overflow: "hidden",
           }}
         >
-          {/* Glass highlight - top-left reflection */}
+          {/* CRT scanlines */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage:
+                "repeating-linear-gradient(to bottom, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 3px)",
+              pointerEvents: "none",
+              zIndex: 5,
+              mixBlendMode: "multiply",
+              opacity: 0.5,
+            }}
+          />
+          {/* Glass highlight */}
           <div
             style={{
               position: "absolute",
@@ -381,66 +589,41 @@ const Index = () => {
               left: 0,
               width: "60%",
               height: "35%",
-              background: "radial-gradient(ellipse at 25% 20%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 60%, transparent 100%)",
+              background:
+                "radial-gradient(ellipse at 25% 20%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 60%, transparent 100%)",
               borderRadius: "inherit",
               pointerEvents: "none",
               zIndex: 10,
             }}
           />
+
+          {/* Face */}
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
-              opacity: speaking ? 0 : 1,
-              transition: "opacity 0.4s ease",
-              pointerEvents: speaking ? "none" : "auto",
+              opacity: textVisible ? 0 : 1,
+              transition: "opacity 0.35s ease",
+              pointerEvents: textVisible ? "none" : "auto",
             }}
           >
-            <div className="flex flex-col items-center" style={{ gap: "clamp(6px, 2vw, 12px)", marginTop: "-4%" }}>
-              {/* Eyes */}
-              <div className="flex items-center" style={{ gap: "clamp(16px, 5vw, 30px)" }}>
-                <div
-                  style={{
-                    width: "clamp(12px, 4vw, 22px)",
-                    height: blinking ? "3px" : "clamp(12px, 4vw, 22px)",
-                    backgroundColor: "#2a2a3d",
-                    borderRadius: blinking ? "2px" : "3px",
-                    transition: "height 0.08s ease, transform 0.15s ease-out",
-                    transform: `translate(${activeEyeOffset.x}px, ${activeEyeOffset.y}px)`,
-                  }}
-                />
-                <div
-                  style={{
-                    width: "clamp(12px, 4vw, 22px)",
-                    height: blinking ? "3px" : "clamp(12px, 4vw, 22px)",
-                    backgroundColor: "#2a2a3d",
-                    borderRadius: blinking ? "2px" : "3px",
-                    transition: "height 0.08s ease, transform 0.15s ease-out",
-                    transform: `translate(${activeEyeOffset.x}px, ${activeEyeOffset.y}px)`,
-                  }}
-                />
-              </div>
-              {/* Mouth */}
-              <div
-                style={{
-                  width: "clamp(22px, 7vw, 38px)",
-                  height: mouthOpen ? "clamp(10px, 3vw, 16px)" : "clamp(3px, 1vw, 5px)",
-                  backgroundColor: "#2a2a3d",
-                  borderRadius: mouthOpen ? "0 0 50% 50%" : "2px",
-                  transition: "all 0.3s ease",
-                }}
-              />
-            </div>
+            <BmoFace
+              emotion={currentEmotion}
+              blinking={blinking}
+              eyeOffset={activeEyeOffset}
+              talkingOpen={talkingOpen}
+            />
           </div>
 
-          {/* Text mode (speaking) */}
+          {/* Text mode */}
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
               opacity: textVisible ? 1 : 0,
-              transition: "opacity 0.4s ease",
-              pointerEvents: speaking ? "auto" : "none",
+              transition: "opacity 0.35s ease",
+              pointerEvents: textVisible ? "auto" : "none",
               padding: "clamp(16px, 5vw, 28px)",
               overflow: "hidden",
+              zIndex: 6,
             }}
           >
             <p
@@ -483,9 +666,8 @@ const Index = () => {
           />
         </div>
 
-        {/* Controls area */}
+        {/* Controls */}
         <div className="w-full flex items-start justify-between mt-[5%] px-[10%]">
-          {/* D-Pad */}
           <div
             className="relative"
             style={{ width: "clamp(42px, 13vw, 72px)", height: "clamp(42px, 13vw, 72px)", cursor: "pointer" }}
@@ -494,14 +676,12 @@ const Index = () => {
               setDpadPressed(false);
               if (chatBarTimeoutRef.current) clearTimeout(chatBarTimeoutRef.current);
               if (chatBarVisible) {
-                // fade out then hide
                 setChatBarAnimating(true);
                 chatBarTimeoutRef.current = setTimeout(() => {
                   setChatBarVisible(false);
                   setChatBarAnimating(false);
                 }, 250);
               } else {
-                // show then fade in
                 setChatBarVisible(true);
                 setChatBarAnimating(false);
               }
@@ -530,10 +710,8 @@ const Index = () => {
             />
           </div>
 
-          {/* Right buttons */}
           <div className="flex flex-col items-center" style={{ gap: "clamp(6px, 2vw, 12px)" }}>
             <div className="flex items-center" style={{ gap: "clamp(10px, 3vw, 20px)" }}>
-              {/* Triangle button */}
               <div
                 onPointerDown={() => setTrianglePressed(true)}
                 onPointerUp={() => setTrianglePressed(false)}
@@ -549,7 +727,6 @@ const Index = () => {
                   cursor: "pointer",
                 }}
               />
-              {/* Small green circle */}
               <div
                 onPointerDown={() => setGreenPressed(true)}
                 onPointerUp={() => setGreenPressed(false)}
@@ -567,10 +744,12 @@ const Index = () => {
                   filter: "brightness(1)",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.08)")}
-                onMouseLeave={(e) => { (e.currentTarget.style.filter = "brightness(1)"); setGreenPressed(false); }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.filter = "brightness(1)";
+                  setGreenPressed(false);
+                }}
               />
             </div>
-            {/* Big pink button (stop/reset) */}
             <div
               onClick={handleStop}
               onPointerDown={() => setPinkPressed(true)}
@@ -589,12 +768,14 @@ const Index = () => {
                 filter: "brightness(1)",
               }}
               onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.08)")}
-              onMouseLeave={(e) => { (e.currentTarget.style.filter = "brightness(1)"); setPinkPressed(false); }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.filter = "brightness(1)";
+                setPinkPressed(false);
+              }}
             />
           </div>
         </div>
 
-        {/* Bottom dashes */}
         <div className="flex mt-[4%]" style={{ gap: "clamp(5px, 1.5vw, 10px)" }}>
           <div
             style={{
@@ -615,6 +796,88 @@ const Index = () => {
         </div>
       </div>
 
+      {/* Chat bubbles */}
+      {chatBarVisible && hasConversation && (
+        <div
+          className="fixed left-0 right-0 flex justify-center pointer-events-none"
+          style={{
+            bottom: "calc(clamp(10px, 2.5vw, 16px) * 2 + clamp(36px, 10vw, 48px) + 8px)",
+            zIndex: 40,
+          }}
+        >
+          <div
+            className="pointer-events-auto"
+            style={{
+              width: "min(92vw, 520px)",
+              maxHeight: "28vh",
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              padding: "10px 14px",
+              opacity: chatBarAnimating ? 0 : 1,
+              transform: chatBarAnimating ? "translateY(10px)" : "translateY(0)",
+              transition: "opacity 250ms ease, transform 250ms ease",
+            }}
+          >
+            {conversationHistory.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                  maxWidth: "80%",
+                  padding: "8px 12px",
+                  borderRadius: 14,
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: "clamp(12px, 3vw, 14px)",
+                  lineHeight: 1.45,
+                  backgroundColor: m.role === "user" ? "#f28da0" : "#d0dfca",
+                  color: m.role === "user" ? "#ffffff" : "#2a2a3d",
+                  border:
+                    m.role === "user"
+                      ? "1px solid #d4748a"
+                      : "1px solid #5faa93",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                  wordBreak: "break-word",
+                }}
+              >
+                {m.content}
+              </div>
+            ))}
+            {thinking && (
+              <div
+                style={{
+                  alignSelf: "flex-start",
+                  padding: "10px 14px",
+                  borderRadius: 14,
+                  backgroundColor: "#d0dfca",
+                  border: "1px solid #5faa93",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                  display: "flex",
+                  gap: 4,
+                  alignItems: "center",
+                }}
+              >
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      backgroundColor: "#2a2a3d",
+                      display: "inline-block",
+                      animation: `bmo-bounce-dot 1.2s ${i * 0.15}s ease-in-out infinite`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+      )}
+
       {/* Chat input bar */}
       <div
         className="fixed bottom-0 left-0 right-0 flex items-center"
@@ -630,6 +893,7 @@ const Index = () => {
           opacity: chatBarVisible && !chatBarAnimating ? 1 : 0,
           transform: chatBarVisible && !chatBarAnimating ? "translateY(0)" : "translateY(20px)",
           transition: "opacity 250ms ease-out, transform 250ms ease-out",
+          zIndex: 50,
         }}
       >
         <input
